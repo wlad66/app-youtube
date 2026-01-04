@@ -1,0 +1,6 @@
+feedparser
+psycopg2-binary
+google-generativeai
+youtube-transcript-api
+requests
+python-dotenv
