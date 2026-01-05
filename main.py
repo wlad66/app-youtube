@@ -8,7 +8,7 @@ GEMINI_KEY = os.getenv("GEMINI_KEY")
 TG_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 # Lista dei canali (ID canale, non il nome)
-CHANNELS = ["UC_x5XG1OV2P6uYZ5gzS9tNQ", "ID_ALTRO_CANALE"] 
+CHANNELS = os.getenv("CHANNELS", "").split(",")
 
 genai.configure(api_key=GEMINI_KEY)
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
@@ -66,3 +66,4 @@ if __name__ == "__main__":
             check_youtube()
         except Exception as e:
             print(f"Errore: {e}")
+
