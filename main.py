@@ -27,22 +27,26 @@ def get_summary(video_id, title):
         # Recupera la lista di tutte le trascrizioni disponibili
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         
-        # Cerca prima italiano o inglese, inclusi quelli generati automaticamente
         try:
-            srt = transcript_list.find_transcript(['it', 'en'])
+            # 1. Prova a cercare Italiano, Inglese o Spagnolo
+            srt = transcript_list.find_transcript(['it', 'en', 'es'])
         except:
-            # Se non trova it/en, prende la prima trascrizione disponibile in assoluto
-            srt = transcript_list.find_generated_transcript(['it', 'en'])
+            # 2. SE FALLISCE, prendi la prima lingua disponibile in assoluto
+            # Questo assicura che il testo venga passato a Gemini
+            srt = next(iter(transcript_list))
             
         transcript = srt.fetch()
         text = " ".join([t['text'] for t in transcript])[:10000]
         
-        prompt = f"Riassumi il video '{title}' in 5 punti chiave: {text}"
+        # Chiediamo esplicitamente a Gemini di tradurre in Italiano
+        prompt = f"Riassumi il video '{title}' in ITALIANO in 5 punti chiave. Se il testo originale non è in italiano, traducilo: {text}"
+        
+        # SOLO ORA viene chiamata la chiave API di Gemini
         response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         return response.text
     except Exception as e:
-        print(f"⚠️ Impossibile recuperare testo per {video_id}: {e}")
-        return "Riassunto non disponibile: YouTube ha bloccato la trascrizione o non è presente."
+        print(f"⚠️ Errore definitivo per {video_id}: {e}")
+        return "Riassunto non disponibile: il video non ha trascrizioni leggibili."
 
 def check_youtube():
     print("--- Controllo nuovi video in corso... ---")
@@ -68,7 +72,7 @@ def check_youtube():
     conn.close()
 
 if __name__ == "__main__":
-    print("🚀 VERSIONE 6: Bot avviato correttamente!") 
+    print("🚀 VERSIONE 7: Bot avviato correttamente!") 
     while True:
         try:
             check_youtube()
