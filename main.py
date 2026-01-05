@@ -1,58 +1,79 @@
 import time, os, feedparser, requests, psycopg2
-import google.generativeai as genai
+from google import genai  # Nuovo SDK 2026
 from youtube_transcript_api import YouTubeTranscriptApi
 
-# --- CONFIGURAZIONE (Usa variabili d'ambiente su Dokploy) ---
+# --- CONFIGURAZIONE ---
 DB_URL = os.getenv("DATABASE_URL")
 GEMINI_KEY = os.getenv("GEMINI_KEY")
 TG_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-# Lista dei canali (ID canale, non il nome)
-CHANNELS = os.getenv("CHANNELS", "").split(",")
+CHANNELS = [c.strip() for c in os.getenv("CHANNELS", "").split(",") if c.strip()]
 
-genai.configure(api_key=GEMINI_KEY)
-ai_model = genai.GenerativeModel('gemini-1.5-flash')
+# Inizializzazione Nuovo Client Gemini
+client = genai.Client(api_key=GEMINI_KEY)
 
 def init_db():
-    conn = psycopg2.connect(DB_URL)
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS videos (video_id TEXT PRIMARY KEY, title TEXT, summary TEXT)")
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        conn = psycopg2.connect(DB_URL)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS videos (video_id TEXT PRIMARY KEY, title TEXT, summary TEXT)")
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"❌ Errore Database: {e}")
 
 def get_summary(video_id, title):
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['it', 'en'])
-        text = " ".join([t['text'] for t in transcript])[:10000] # Limite testo
+        text = " ".join([t['text'] for t in transcript])[:10000]
+        
         prompt = f"Riassumi il video '{title}' in 5 punti chiave ed elenca eventuali link o nomi citati: {text}"
-        response = ai_model.generate_content(prompt)
+        
+        # Nuovo metodo generazione 2026
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
         return response.text
     except Exception as e:
-        return f"Riassunto non disponibile: {str(e)}"
+        print(f"⚠️ Trascrizione non disponibile per {video_id}: {e}")
+        return "Riassunto non disponibile (trascrizione mancante o disabilitata)."
 
 def check_youtube():
+    print("--- Controllo nuovi video in corso... ---")
     init_db()
     conn = psycopg2.connect(DB_URL)
     cur = conn.cursor()
+    
+    if not CHANNELS:
+        print("⚠️ Nessun canale configurato nella variabile d'ambiente CHANNELS")
     
     for channel_id in CHANNELS:
         feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
         feed = feedparser.parse(feed_url)
         
-        for entry in feed.entries[:3]: # Controlla gli ultimi 3 video
+        for entry in feed.entries[:3]:
             video_id = entry.yt_videoid
             cur.execute("SELECT video_id FROM videos WHERE video_id = %s", (video_id,))
+            
             if not cur.fetchone():
-                print(f"Nuovo video trovato: {entry.title}")
+                print(f"✨ Nuovo video trovato: {entry.title}")
                 summary = get_summary(video_id, entry.title)
                 
-                # Invia a Telegram
-                msg = f"📺 *{entry.title}*\n\n📝 *RIASSUNTO:*\n{summary}\n\n🔗 {entry.link}"
-                requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
-                              data={"chat_id": TG_CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+                # Messaggio sicuro: rimosso Markdown che spesso rompe l'invio
+                msg = f"📺 VIDEO: {entry.title}\n\n📝 RIASSUNTO:\n{summary}\n\n🔗 {entry.link}"
                 
-                # Salva in Database
+                # Invio a Telegram con controllo errore
+                tg_url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+                payload = {"chat_id": TG_CHAT_ID, "text": msg}
+                
+                r = requests.post(tg_url, data=payload)
+                if r.status_code != 200:
+                    print(f"❌ Errore Telegram: {r.text}")
+                else:
+                    print(f"✅ Messaggio inviato per: {entry.title}")
+                
                 cur.execute("INSERT INTO videos (video_id, title, summary) VALUES (%s, %s, %s)", 
                             (video_id, entry.title, summary))
                 conn.commit()
@@ -61,9 +82,13 @@ def check_youtube():
     conn.close()
 
 if __name__ == "__main__":
+    print("🚀 Bot avviato correttamente!")
     while True:
         try:
             check_youtube()
         except Exception as e:
-            print(f"Errore: {e}")
-
+            print(f"🚨 Errore nel ciclo principale: {e}")
+        
+        # PAUSA FONDAMENTALE (es. controlla ogni 10 minuti)
+        print("😴 In attesa per 10 minuti...")
+        time.sleep(600)
