@@ -11,52 +11,47 @@ CHANNELS = [c.strip() for c in os.getenv("CHANNELS", "").split(",") if c.strip()
 
 client = genai.Client(api_key=GEMINI_KEY)
 
-def init_db():
-    try:
-        conn = psycopg2.connect(DB_URL)
-        cur = conn.cursor()
-        cur.execute("CREATE TABLE IF NOT EXISTS videos (video_id TEXT PRIMARY KEY, title TEXT, summary TEXT)")
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"❌ Errore Database: {e}")
-
 def get_summary(video_id, title):
     try:
-        # Recupera la lista di tutte le trascrizioni disponibili
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        # Percorso del file cookies caricato da GitHub
+        cookie_path = "cookies.txt"
+        
+        # Tentativo di recupero con cookies per evitare il blocco IP
+        if os.path.exists(cookie_path):
+            print(f"🍪 Uso i cookies per {video_id}...")
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookie_path)
+        else:
+            print(f"⚠️ cookies.txt non trovato, provo senza per {video_id}...")
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         
         try:
-            # 1. Prova a cercare Italiano, Inglese o Spagnolo
             srt = transcript_list.find_transcript(['it', 'en', 'es'])
         except:
-            # 2. SE FALLISCE, prendi la prima lingua disponibile in assoluto
-            # Questo assicura che il testo venga passato a Gemini
             srt = next(iter(transcript_list))
             
         transcript = srt.fetch()
         text = " ".join([t['text'] for t in transcript])[:10000]
         
-        # Chiediamo esplicitamente a Gemini di tradurre in Italiano
-        prompt = f"Riassumi il video '{title}' in ITALIANO in 5 punti chiave. Se il testo originale non è in italiano, traducilo: {text}"
-        
-        # SOLO ORA viene chiamata la chiave API di Gemini
+        prompt = f"Riassumi il video '{title}' in ITALIANO in 5 punti chiave: {text}"
         response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         return response.text
     except Exception as e:
-        print(f"⚠️ Errore definitivo per {video_id}: {e}")
-        return "Riassunto non disponibile: il video non ha trascrizioni leggibili."
+        print(f"⚠️ Errore critico per {video_id}: {e}")
+        return "Riassunto non disponibile (YouTube ha bloccato il server)."
 
 def check_youtube():
     print("--- Controllo nuovi video in corso... ---")
-    init_db()
-    conn = psycopg2.connect(DB_URL)
-    cur = conn.cursor()
+    try:
+        conn = psycopg2.connect(DB_URL)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS videos (video_id TEXT PRIMARY KEY, title TEXT, summary TEXT)")
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Errore DB: {e}")
+        return
 
     for channel_id in CHANNELS:
-        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-        feed = feedparser.parse(feed_url)
+        feed = feedparser.parse(f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}")
         for entry in feed.entries[:3]:
             video_id = entry.yt_videoid
             cur.execute("SELECT video_id FROM videos WHERE video_id = %s", (video_id,))
@@ -72,7 +67,7 @@ def check_youtube():
     conn.close()
 
 if __name__ == "__main__":
-    print("🚀 VERSIONE 7: Bot avviato correttamente!") 
+    print("🚀 VERSIONE 8: Bot avviato con supporto Cookies!") 
     while True:
         try:
             check_youtube()
