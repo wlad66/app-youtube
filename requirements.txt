@@ -2,4 +2,4 @@ google-genai
 feedparser
 requests
 psycopg2-binary
-youtube-transcript-api>=0.6.3
+youtube-transcript-api==0.6.3
