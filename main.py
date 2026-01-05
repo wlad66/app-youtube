@@ -66,4 +66,3 @@ if __name__ == "__main__":
             check_youtube()
         except Exception as e:
             print(f"Errore: {e}")
-        time.sleep(3600) # Controlla ogni ora
