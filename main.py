@@ -1,6 +1,7 @@
 import time, os, feedparser, requests, psycopg2
 from google import genai 
-import youtube_transcript_api
+# Importazione specifica della classe per evitare l'errore "no attribute"
+from youtube_transcript_api import YouTubeTranscriptApi as YT_API
 
 # --- CONFIGURAZIONE ---
 DB_URL = os.getenv("DATABASE_URL")
@@ -15,16 +16,13 @@ def get_summary(video_id, title):
     try:
         cookie_path = "cookies.txt"
         
-        # Chiamata ultra-sicura alla classe
-        api = youtube_transcript_api.YouTubeTranscriptApi
-        
+        # Usiamo il riferimento diretto caricato sopra
         if os.path.exists(cookie_path):
             print(f"🍪 Uso i cookies per {video_id}...")
-            # Usiamo i cookies per evitare il blocco "no element found"
-            transcript_list = api.list_transcripts(video_id, cookies=cookie_path)
+            transcript_list = YT_API.list_transcripts(video_id, cookies=cookie_path)
         else:
             print(f"⚠️ cookies.txt non trovato, provo senza...")
-            transcript_list = api.list_transcripts(video_id)
+            transcript_list = YT_API.list_transcripts(video_id)
         
         try:
             srt = transcript_list.find_transcript(['it', 'en', 'es'])
@@ -69,9 +67,7 @@ def check_youtube():
     conn.close()
 
 if __name__ == "__main__":
-    # Verifichiamo la versione della libreria all'avvio
-    lib_version = getattr(youtube_transcript_api, '__version__', 'sconosciuta')
-    print(f"🚀 VERSIONE 10 (Lib: {lib_version}): Bot pronto!") 
+    print("🚀 VERSIONE 11: Bot in fase di test finale...") 
     while True:
         try:
             check_youtube()
