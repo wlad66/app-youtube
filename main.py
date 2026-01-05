@@ -13,17 +13,18 @@ client = genai.Client(api_key=GEMINI_KEY)
 
 def get_summary(video_id, title):
     try:
-        # Percorso del file cookies caricato da GitHub
         cookie_path = "cookies.txt"
         
-        # Tentativo di recupero con cookies per evitare il blocco IP
+        # Tentativo di recupero con cookies e gestione migliorata
         if os.path.exists(cookie_path):
             print(f"🍪 Uso i cookies per {video_id}...")
+            # Usiamo list_transcripts che è più robusto con i cookies
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookie_path)
         else:
-            print(f"⚠️ cookies.txt non trovato, provo senza per {video_id}...")
+            print(f"⚠️ cookies.txt non trovato, provo senza...")
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         
+        # Cerchiamo la trascrizione (qualsiasi lingua, preferendo it/en/es)
         try:
             srt = transcript_list.find_transcript(['it', 'en', 'es'])
         except:
@@ -36,8 +37,10 @@ def get_summary(video_id, title):
         response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         return response.text
     except Exception as e:
-        print(f"⚠️ Errore critico per {video_id}: {e}")
-        return "Riassunto non disponibile (YouTube ha bloccato il server)."
+        # Log più dettagliato dell'errore
+        error_msg = str(e).split('\n')[0] 
+        print(f"⚠️ Errore per {video_id}: {error_msg}")
+        return f"Riassunto non disponibile (Errore YouTube: {error_msg})"
 
 def check_youtube():
     print("--- Controllo nuovi video in corso... ---")
@@ -67,7 +70,7 @@ def check_youtube():
     conn.close()
 
 if __name__ == "__main__":
-    print("🚀 VERSIONE 8: Bot avviato con supporto Cookies!") 
+    print("🚀 VERSIONE 9: Bot avviato con protezione aggiornata!") 
     while True:
         try:
             check_youtube()
