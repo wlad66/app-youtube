@@ -1,6 +1,6 @@
 import time, os, feedparser, requests, psycopg2
 from google import genai 
-import youtube_transcript_api
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # --- CONFIGURAZIONE ---
 DB_URL = os.getenv("DATABASE_URL")
@@ -24,27 +24,31 @@ def init_db():
 
 def get_summary(video_id, title):
     try:
-        # TENTATIVO DI ACCESSO DIRETTO ALLA CLASSE
-        from youtube_transcript_api import YouTubeTranscriptApi as api
-        srt = api.get_transcript(video_id, languages=['it', 'en'])
+        # Recupera la lista di tutte le trascrizioni disponibili
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         
-        text = " ".join([t['text'] for t in srt])[:10000]
+        # Cerca prima italiano o inglese, inclusi quelli generati automaticamente
+        try:
+            srt = transcript_list.find_transcript(['it', 'en'])
+        except:
+            # Se non trova it/en, prende la prima trascrizione disponibile in assoluto
+            srt = transcript_list.find_generated_transcript(['it', 'en'])
+            
+        transcript = srt.fetch()
+        text = " ".join([t['text'] for t in transcript])[:10000]
+        
         prompt = f"Riassumi il video '{title}' in 5 punti chiave: {text}"
         response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         return response.text
     except Exception as e:
-        print(f"⚠️ Errore trascrizione per {video_id}: {e}")
-        return "Riassunto non disponibile: errore tecnico nel recupero del testo."
+        print(f"⚠️ Impossibile recuperare testo per {video_id}: {e}")
+        return "Riassunto non disponibile: YouTube ha bloccato la trascrizione o non è presente."
 
 def check_youtube():
     print("--- Controllo nuovi video in corso... ---")
     init_db()
-    try:
-        conn = psycopg2.connect(DB_URL)
-        cur = conn.cursor()
-    except Exception as e:
-        print(f"❌ Errore DB: {e}")
-        return
+    conn = psycopg2.connect(DB_URL)
+    cur = conn.cursor()
 
     for channel_id in CHANNELS:
         feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
@@ -59,14 +63,15 @@ def check_youtube():
                 requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", data={"chat_id": TG_CHAT_ID, "text": msg})
                 cur.execute("INSERT INTO videos (video_id, title, summary) VALUES (%s, %s, %s)", (video_id, entry.title, summary))
                 conn.commit()
+                print(f"✅ Messaggio inviato per: {entry.title}")
     cur.close()
     conn.close()
 
 if __name__ == "__main__":
-    print("🚀 VERSIONE 5: Bot avviato correttamente!") 
+    print("🚀 VERSIONE 6: Bot avviato correttamente!") 
     while True:
         try:
             check_youtube()
         except Exception as e:
-            print(f"🚨 Errore ciclo: {e}")
+            print(f"🚨 Errore: {e}")
         time.sleep(600)
