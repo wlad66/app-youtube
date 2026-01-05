@@ -1,6 +1,5 @@
+google-genai
 feedparser
-psycopg2-binary
-google-generativeai
-youtube-transcript-api
 requests
-python-dotenv
+psycopg2-binary
+youtube-transcript-api
