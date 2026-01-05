@@ -1,6 +1,6 @@
 import time, os, feedparser, requests, psycopg2
 from google import genai 
-from youtube_transcript_api import YouTubeTranscriptApi
+import youtube_transcript_api
 
 # --- CONFIGURAZIONE ---
 DB_URL = os.getenv("DATABASE_URL")
@@ -15,16 +15,17 @@ def get_summary(video_id, title):
     try:
         cookie_path = "cookies.txt"
         
-        # Tentativo di recupero con cookies e gestione migliorata
+        # Chiamata ultra-sicura alla classe
+        api = youtube_transcript_api.YouTubeTranscriptApi
+        
         if os.path.exists(cookie_path):
             print(f"🍪 Uso i cookies per {video_id}...")
-            # Usiamo list_transcripts che è più robusto con i cookies
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookie_path)
+            # Usiamo i cookies per evitare il blocco "no element found"
+            transcript_list = api.list_transcripts(video_id, cookies=cookie_path)
         else:
             print(f"⚠️ cookies.txt non trovato, provo senza...")
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = api.list_transcripts(video_id)
         
-        # Cerchiamo la trascrizione (qualsiasi lingua, preferendo it/en/es)
         try:
             srt = transcript_list.find_transcript(['it', 'en', 'es'])
         except:
@@ -37,10 +38,8 @@ def get_summary(video_id, title):
         response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         return response.text
     except Exception as e:
-        # Log più dettagliato dell'errore
-        error_msg = str(e).split('\n')[0] 
-        print(f"⚠️ Errore per {video_id}: {error_msg}")
-        return f"Riassunto non disponibile (Errore YouTube: {error_msg})"
+        print(f"⚠️ Errore per {video_id}: {e}")
+        return f"Riassunto non disponibile (Errore: {str(e)[:50]})"
 
 def check_youtube():
     print("--- Controllo nuovi video in corso... ---")
@@ -70,7 +69,9 @@ def check_youtube():
     conn.close()
 
 if __name__ == "__main__":
-    print("🚀 VERSIONE 9: Bot avviato con protezione aggiornata!") 
+    # Verifichiamo la versione della libreria all'avvio
+    lib_version = getattr(youtube_transcript_api, '__version__', 'sconosciuta')
+    print(f"🚀 VERSIONE 10 (Lib: {lib_version}): Bot pronto!") 
     while True:
         try:
             check_youtube()
